@@ -1,0 +1,104 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProgramStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model QuarterProgram {
+  id        Int           @id @default(autoincrement())
+  branchId  String
+  year      Int
+  quarter   Int
+  status    ProgramStatus @default(DRAFT)
+  note      String?
+  createdBy Int?
+  updatedBy Int?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  lessons ProgramLesson[]
+
+  @@unique([branchId, year, quarter])
+  @@index([branchId])
+  @@index([year, quarter])
+}
+
+model ProgramLesson {
+  id                      Int       @id @default(autoincrement())
+  quarterProgramId        Int
+  date                    DateTime
+  lessonText              String
+  prepared                Boolean   @default(false)
+  durationMinutes         Int?
+  plannedParticipantCount Int?      @default(0)
+  actualParticipantCount  Int?      @default(0)
+  commonProgramCode       String?
+  locationCode            String?
+  note                    String?
+  evaluationPercent       Float?
+  coreSessionId           Int?
+  createdAt               DateTime  @default(now())
+  updatedAt               DateTime  @updatedAt
+
+  quarterProgram QuarterProgram      @relation(fields: [quarterProgramId], references: [id], onDelete: Cascade)
+  leaders        ProgramLeader[]
+  files          ProgramFile[]
+  evaluations    ProgramEvaluation[]
+
+  @@index([quarterProgramId])
+  @@index([date])
+  @@index([coreSessionId])
+}
+
+model ProgramLeader {
+  id              Int      @id @default(autoincrement())
+  programLessonId Int
+  userId          Int
+  role            String   @default("MAIN")
+  createdAt       DateTime @default(now())
+
+  programLesson ProgramLesson @relation(fields: [programLessonId], references: [id], onDelete: Cascade)
+
+  @@unique([programLessonId, userId])
+  @@index([programLessonId])
+  @@index([userId])
+}
+
+model ProgramFile {
+  id                 Int      @id @default(autoincrement())
+  programLessonId    Int
+  originalName       String
+  fileName           String
+  mimeType           String
+  size               Int
+  cloudinaryPublicId String
+  cloudinaryUrl      String
+  createdAt          DateTime @default(now())
+
+  programLesson ProgramLesson @relation(fields: [programLessonId], references: [id], onDelete: Cascade)
+
+  @@index([programLessonId])
+}
+
+model ProgramEvaluation {
+  id              Int      @id @default(autoincrement())
+  programLessonId Int
+  evaluatorId     Int?
+  percent         Float?
+  comment         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  programLesson ProgramLesson @relation(fields: [programLessonId], references: [id], onDelete: Cascade)
+
+  @@index([programLessonId])
+}
