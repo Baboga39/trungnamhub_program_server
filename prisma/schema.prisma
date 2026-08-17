@@ -8,17 +8,21 @@ datasource db {
 }
 
 model QuarterProgram {
-  id        Int             @id @default(autoincrement())
-  branchId  String
-  year      Int
-  quarter   Int
-  status    ProgramStatus   @default(DRAFT)
-  note      String?
-  createdBy Int?
-  updatedBy Int?
-  createdAt DateTime        @default(now())
-  updatedAt DateTime        @updatedAt
-  lessons   ProgramLesson[]
+  id             Int                    @id @default(autoincrement())
+  branchId       String
+  year           Int
+  quarter        Int
+  status         ProgramStatus          @default(DRAFT)
+  note           String?
+  version        Int                    @default(1)
+  approvedById   Int?
+  createdBy      Int?
+  updatedBy      Int?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  lessons        ProgramLesson[]
+  approvals      ProgramApproval[]
+  approvalTokens ProgramApprovalToken[]
 
   @@unique([branchId, year, quarter])
   @@index([branchId])
@@ -92,8 +96,51 @@ model ProgramEvaluation {
   @@index([programLessonId])
 }
 
+model ProgramApproval {
+  id               Int                   @id @default(autoincrement())
+  quarterProgramId Int
+  reviewerId       Int
+  action           ProgramApprovalAction
+  comment          String?
+  version          Int
+  createdAt        DateTime              @default(now())
+  quarterProgram   QuarterProgram        @relation(fields: [quarterProgramId], references: [id], onDelete: Cascade)
+
+  @@index([quarterProgramId, version, action])
+  @@index([quarterProgramId, createdAt])
+}
+
+model ProgramApprovalToken {
+  id               Int                        @id @default(autoincrement())
+  token            String                     @unique
+  quarterProgramId Int
+  reviewerId       Int
+  version          Int
+  status           ProgramApprovalTokenStatus @default(PENDING)
+  expiredAt        DateTime
+  createdAt        DateTime                   @default(now())
+  quarterProgram   QuarterProgram             @relation(fields: [quarterProgramId], references: [id], onDelete: Cascade)
+
+  @@index([quarterProgramId, reviewerId, version])
+}
+
 enum ProgramStatus {
   DRAFT
+  PENDING
+  NEED_REVISION
+  APPROVED
   PUBLISHED
   ARCHIVED
+}
+
+enum ProgramApprovalAction {
+  APPROVE
+  REJECT
+  RESUBMIT
+}
+
+enum ProgramApprovalTokenStatus {
+  PENDING
+  APPROVED
+  REJECTED
 }

@@ -1,4 +1,5 @@
 const programRoutes = require("./routes/programRoutes");
+const approvalRoutes = require("./routes/approvalRoutes");
 const lessonRoutes = require("./routes/lessonRoutes");
 const leaderRoutes = require("./routes/leaderRoutes");
 const fileRoutes = require("./routes/fileRoutes");
@@ -11,6 +12,7 @@ module.exports = (app) => {
   });
 
   app.use("/api/v1", masterDataRoutes);
+  app.use("/api/v1/program-approvals", approvalRoutes);
   app.use("/api/v1/programs", programRoutes);
   app.use("/api/v1/lessons", lessonRoutes);
   app.use("/api/v1", leaderRoutes);

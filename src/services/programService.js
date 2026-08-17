@@ -2,9 +2,8 @@ const prisma = require("../libs/prisma");
 const { getBranchInfo } = require("../integrations/core/branchService");
 const { getUsersByIdsFromCore } = require("../integrations/core/userService");
 const { getCommonProgramByCode, getLocationByCode } = require("./masterDataService");
-const {
-  deleteFileFromLesson,
-} = require("./fileService");
+const { deleteFileFromLesson } = require("./fileService");
+const { createProgramApprovalToken } = require("./programApprovalTokenService");
 
 /**
  * Service managing QuarterProgram domain entities.
@@ -28,7 +27,25 @@ async function getPrograms(filters = {}, userScope = {}) {
     where.quarter = Number(filters.quarter);
   }
 
-  if (filters.status) {
+  const userRole = String(userScope.role || "").toLowerCase();
+  const isAdmin = userRole === "admin";
+  const currentUserId = userScope.userId ? Number(userScope.userId) : null;
+
+  // Quyền riêng tư danh sách Chương trình sinh hoạt:
+  // - Admin: Xem được toàn bộ trạng thái (DRAFT, PENDING, APPROVED, PUBLISHED...)
+  // - User thường: Xem được bản nháp/đang duyệt DO CHÍNH MÌNH TẠO, hoặc các bản ĐÃ DUYỆT/PHÁT HÀNH của người khác
+  if (!isAdmin && currentUserId) {
+    const statusCondition = filters.status ? { status: filters.status } : {};
+    where.AND = [
+      statusCondition,
+      {
+        OR: [
+          { createdBy: currentUserId },
+          { status: { in: ["APPROVED", "PUBLISHED"] } },
+        ],
+      },
+    ];
+  } else if (filters.status) {
     where.status = filters.status;
   }
 
@@ -74,6 +91,18 @@ async function getProgramById(id, userScope = {}, authHeader = null) {
 
   if (!program) {
     throw { statusCode: 404, message: "Quarter program not found" };
+  }
+
+  const userRole = String(userScope.role || "").toLowerCase();
+  const isAdmin = userRole === "admin";
+  const currentUserId = userScope.userId ? Number(userScope.userId) : null;
+
+  // Kiểm tra quyền xem chi tiết: Người tạo hoặc Admin xem thoải mái, người khác chỉ được xem khi ĐÃ DUYỆT
+  if (!isAdmin && currentUserId && program.createdBy !== currentUserId) {
+    const isApprovedOrPublished = ["APPROVED", "PUBLISHED"].includes(program.status);
+    if (!isApprovedOrPublished) {
+      throw { statusCode: 403, message: "Chương trình này chưa được phê duyệt hoàn tất nên bạn chưa thể xem" };
+    }
   }
 
   // Batch collect all leader userIds to populate names from Core Backend
@@ -275,10 +304,135 @@ async function deleteProgram(id, userScope = {}) {
   };
 }
 
+async function sendProgramForApproval(id, reviewerIds, userScope = {}, authHeader = null) {
+  const programId = Number(id);
+
+  const program = await prisma.quarterProgram.findUnique({
+    where: { id: programId },
+  });
+
+  if (!program) {
+    throw { statusCode: 404, message: "Quarter program not found" };
+  }
+
+  if (userScope.restrictedBranch && String(program.branchId) !== String(userScope.restrictedBranch)) {
+    throw { statusCode: 403, message: "Forbidden: Cannot send program of another branch for approval" };
+  }
+
+  if (program.status !== "DRAFT" && program.status !== "NEED_REVISION") {
+    throw { statusCode: 400, message: `Program in status '${program.status}' cannot be sent for approval` };
+  }
+
+  await prisma.quarterProgram.update({
+    where: { id: programId },
+    data: { status: "PENDING" },
+  });
+
+  const result = await createProgramApprovalToken(
+    programId,
+    reviewerIds,
+    { id: userScope.userId, name: userScope.userName },
+    prisma,
+    authHeader
+  );
+
+  return {
+    success: true,
+    programId,
+    status: "PENDING",
+    approversCount: result.count,
+  };
+}
+
+async function resubmitProgram(id, reviewerIds = [], userScope = {}, authHeader = null) {
+  const programId = Number(id);
+
+  const program = await prisma.quarterProgram.findUnique({
+    where: { id: programId },
+  });
+
+  if (!program) {
+    throw { statusCode: 404, message: "Quarter program not found" };
+  }
+
+  if (userScope.restrictedBranch && String(program.branchId) !== String(userScope.restrictedBranch)) {
+    throw { statusCode: 403, message: "Forbidden: Cannot resubmit program of another branch" };
+  }
+
+  if (program.status !== "NEED_REVISION") {
+    throw { statusCode: 400, message: "Program is not in revision state" };
+  }
+
+  // Find reviewers who rejected the previous version if reviewerIds is empty
+  let targetReviewerIds = reviewerIds;
+  if (!targetReviewerIds || targetReviewerIds.length === 0) {
+    const rejectedLogs = await prisma.programApproval.findMany({
+      where: {
+        quarterProgramId: programId,
+        version: program.version,
+        action: "REJECT",
+      },
+      select: { reviewerId: true },
+    });
+    targetReviewerIds = Array.from(new Set(rejectedLogs.map((r) => r.reviewerId)));
+  }
+
+  if (!targetReviewerIds.length) {
+    throw { statusCode: 400, message: "No reviewer specified for resubmission" };
+  }
+
+  const newVersion = program.version + 1;
+
+  // Clear old tokens for this program
+  await prisma.programApprovalToken.deleteMany({
+    where: { quarterProgramId: programId },
+  });
+
+  // Update program version and status
+  await prisma.quarterProgram.update({
+    where: { id: programId },
+    data: {
+      version: newVersion,
+      status: "PENDING",
+      updatedBy: userScope.userId || null,
+    },
+  });
+
+  // Record RESUBMIT audit log
+  await prisma.programApproval.create({
+    data: {
+      quarterProgramId: programId,
+      reviewerId: userScope.userId || 0,
+      action: "RESUBMIT",
+      version: newVersion,
+      comment: "Đã cập nhật bài học và trình lại phiên bản mới",
+    },
+  });
+
+  // Generate tokens for new version
+  const result = await createProgramApprovalToken(
+    programId,
+    targetReviewerIds,
+    { id: userScope.userId, name: userScope.userName },
+    prisma,
+    authHeader
+  );
+
+  return {
+    success: true,
+    programId,
+    version: newVersion,
+    status: "PENDING",
+    approversCount: result.count,
+  };
+}
+
 module.exports = {
   getPrograms,
   getProgramById,
   createProgram,
   updateProgram,
   deleteProgram,
+  sendProgramForApproval,
+  resubmitProgram,
 };

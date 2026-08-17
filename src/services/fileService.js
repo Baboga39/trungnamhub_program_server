@@ -4,6 +4,18 @@ const cloudinary = require("../config/cloudinary");
 const streamifier = require("streamifier");
 
 /**
+ * Helper to fix UTF-8 encoding for filenames parsed as latin1 by busboy/multer
+ */
+function fixUtf8Filename(filename) {
+  if (!filename) return "";
+  try {
+    return Buffer.from(filename, "latin1").toString("utf8");
+  } catch (err) {
+    return filename;
+  }
+}
+
+/**
  * Determine Cloudinary resource type from MIME type.
  *
  * Images  -> image
@@ -118,6 +130,9 @@ async function uploadFileToLesson(
     };
   }
 
+  // Fix UTF-8 encoding for Vietnamese filenames
+  const decodedOriginalName = fixUtf8Filename(file.originalname);
+
   // --------------------------------------------------
   // 4. Determine resource type
   // --------------------------------------------------
@@ -126,32 +141,9 @@ async function uploadFileToLesson(
     file.mimetype
   );
 
-  // --------------------------------------------------
-  // 5. Get file extension
-  //
-  // Example:
-  // report.pdf  -> .pdf
-  // report.docx -> .docx
-  // report.xlsx -> .xlsx
-  // report.pptx -> .pptx
-  // --------------------------------------------------
-
   const extension = path
-    .extname(file.originalname)
+    .extname(decodedOriginalName)
     .toLowerCase();
-
-  // --------------------------------------------------
-  // 6. Generate Cloudinary Public ID
-  //
-  // IMPORTANT:
-  // Raw files should keep their extension.
-  //
-  // PDF:
-  // lesson_1_123456.pdf
-  //
-  // DOCX:
-  // lesson_1_123456.docx
-  // --------------------------------------------------
 
   const publicId =
     resourceType === "raw"
@@ -160,7 +152,7 @@ async function uploadFileToLesson(
 
   console.log("[File Upload] Preparing upload", {
     lessonId: Number(lessonId),
-    originalName: file.originalname,
+    originalName: decodedOriginalName,
     mimeType: file.mimetype,
     resourceType,
     extension,
@@ -205,9 +197,9 @@ async function uploadFileToLesson(
       data: {
         programLessonId: Number(lessonId),
 
-        originalName: file.originalname,
+        originalName: decodedOriginalName,
 
-        fileName: file.originalname,
+        fileName: decodedOriginalName,
 
         mimeType: file.mimetype,
 
