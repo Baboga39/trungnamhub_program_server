@@ -8,6 +8,9 @@ const errorMiddleware = require("./middlewares/errorMiddleware");
 
 const app = express();
 
+// Trust Render's reverse proxy
+app.set("trust proxy", 1);
+
 // Security Middlewares
 app.use(helmet());
 app.use(cors());
@@ -23,6 +26,7 @@ const limiter = rateLimit({
     message: "Too many requests from this IP, please try again later.",
   },
 });
+
 app.use(limiter);
 
 // Request Logging
