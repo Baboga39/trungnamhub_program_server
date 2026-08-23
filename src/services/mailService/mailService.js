@@ -3,7 +3,7 @@ const buildProgramApprovalHTML = require("./templates/buildProgramApprovalHTML")
 
 const resendApiKey = process.env.RESEND_API_KEY;
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
-const FROM_EMAIL = process.env.RESEND_FROM_EMAIL || "Trung Nam Hub <onboarding@resend.dev>";
+const FROM_EMAIL =  "Trung Nam Hub <onboarding@trungnamhub.io.vn>";
 
 const formatToEmail = (toInput) => {
   if (Array.isArray(toInput)) {
