@@ -161,7 +161,8 @@ async function handleProgramApproval(req, res, next) {
       return error(res, "Token và hành động (APPROVE/REJECT) là bắt buộc", 400);
     }
 
-    const result = await approvalTokenService.handleProgramApproval(token, action, comment);
+    const authHeader = req.headers["authorization"];
+    const result = await approvalTokenService.handleProgramApproval(token, action, comment, authHeader);
     return success(res, result, "Xử lý phê duyệt thành công");
   } catch (err) {
     next(err);
@@ -177,12 +178,13 @@ async function handleProgramApprovalByUser(req, res, next) {
       return error(res, "Hành động (APPROVE/REJECT) là bắt buộc", 400);
     }
 
+    const authHeader = req.headers["authorization"];
     const result = await approvalTokenService.handleProgramApprovalByUser({
       quarterProgramId: id,
       reviewerId: req.user.userId,
       action,
       comment,
-    });
+    }, authHeader);
     return success(res, result, "Xử lý phê duyệt thành công");
   } catch (err) {
     next(err);
@@ -216,6 +218,16 @@ async function getProgramApprovalHistory(req, res, next) {
   }
 }
 
+async function getPendingProgramApprovals(req, res, next) {
+  try {
+    const reviewerId = req.user.userId;
+    const list = await approvalTokenService.getPendingProgramApprovals(reviewerId);
+    return success(res, list, "Lấy danh sách chờ duyệt thành công");
+  } catch (err) {
+    next(err);
+  }
+}
+
 module.exports = {
   getPrograms,
   getProgramById,
@@ -228,4 +240,5 @@ module.exports = {
   handleProgramApprovalByUser,
   getProgramApprovalDetail,
   getProgramApprovalHistory,
+  getPendingProgramApprovals,
 };

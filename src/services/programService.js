@@ -277,6 +277,14 @@ async function deleteProgram(id, userScope = {}) {
     };
   }
 
+  // Chặn xóa chương trình đã được phê duyệt
+  if (["APPROVED", "PUBLISHED"].includes(program.status)) {
+    throw {
+      statusCode: 400,
+      message: "Chương trình sinh hoạt đã được phê duyệt, không thể xóa.",
+    };
+  }
+
  
   let deletedFileCount = 0;
 

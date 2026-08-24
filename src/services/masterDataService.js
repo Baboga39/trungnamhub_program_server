@@ -15,7 +15,7 @@ const COMMON_PROGRAMS = [
 ];
 
 const LOCATIONS = [
-  { code: "TRAI_DUONG", name: "Trại Đường" },
+  { code: "TRAI_DUONG", name: "Trai Đường" },
   { code: "BAO_AN_DUONG", name: "Báo Ân Đường" },
   { code: "VAN_PHONG_BHD", name: "Văn phòng BHD" },
   { code: "HOI_TRUONG", name: "Hội trường" },

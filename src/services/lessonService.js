@@ -109,6 +109,19 @@ async function updateLesson(id, data, userScope = {}) {
     throw { statusCode: 403, message: "Forbidden: Cannot update lesson of another branch" };
   }
 
+  // Khi chương trình đã được phê duyệt (APPROVED hoặc PUBLISHED):
+  // Khóa trường tên bài học (lessonText), các trường khác vẫn được phép cập nhật
+  if (
+    ["APPROVED", "PUBLISHED"].includes(lesson.quarterProgram.status) &&
+    data.lessonText !== undefined &&
+    data.lessonText.trim() !== lesson.lessonText
+  ) {
+    throw {
+      statusCode: 400,
+      message: "Chương trình đã được phê duyệt, không thể thay đổi tên bài học.",
+    };
+  }
+
   const updated = await prisma.programLesson.update({
     where: { id: Number(id) },
     data,
@@ -151,6 +164,14 @@ async function deleteLesson(id, userScope = {}) {
       statusCode: 403,
       message:
         "Forbidden: Cannot delete lesson of another branch",
+    };
+  }
+
+  // Chặn xóa bài học khi chương trình đã được phê duyệt
+  if (["APPROVED", "PUBLISHED"].includes(lesson.quarterProgram.status)) {
+    throw {
+      statusCode: 400,
+      message: "Chương trình sinh hoạt đã được phê duyệt, không thể xóa bài học.",
     };
   }
 

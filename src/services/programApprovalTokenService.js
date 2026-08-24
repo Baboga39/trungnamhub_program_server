@@ -1,6 +1,10 @@
 const prisma = require("../libs/prisma");
 const crypto = require("crypto");
-const { sendProgramApprovalMail } = require("./mailService/mailService");
+const {
+  sendProgramApprovalMail,
+  sendProgramDecisionMailToCreator,
+  sendProgramDecisionConfirmationToReviewer,
+} = require("./mailService/mailService");
 const { getUsersByIdsFromCore } = require("../integrations/core/userService");
 const { getBranchInfo } = require("../integrations/core/branchService");
 
@@ -146,8 +150,55 @@ async function handleApprovalCore({ tx, program, tokenData, action, comment }) {
   return { success: true, status: "PENDING", message: `Approved (${approved}/${total})` };
 }
 
-async function handleProgramApproval(token, action, comment) {
-  return prisma.$transaction(async (tx) => {
+async function notifyApprovalDecision({ program, tokenData, action, comment, resultStatus, authHeader }) {
+  try {
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const programLink = `${frontendUrl}/programs/${program.id}`;
+
+    const userIds = [];
+    if (program.createdBy) userIds.push(Number(program.createdBy));
+    if (tokenData?.reviewerId) userIds.push(Number(tokenData.reviewerId));
+
+    const userMap = await getUsersByIdsFromCore(userIds, authHeader);
+    const creator = program.createdBy ? userMap.get(Number(program.createdBy)) : null;
+    const reviewer = userMap.get(Number(tokenData.reviewerId));
+    const reviewerName = reviewer?.name || `Trưởng #${tokenData.reviewerId}`;
+
+    // 1. Gửi mail thông báo tới người tạo chương trình
+    if (creator && creator.email) {
+      sendProgramDecisionMailToCreator({
+        toEmail: creator.email,
+        creatorName: creator.name || "Ban Phụ Trách",
+        reviewerName,
+        program,
+        action,
+        comment,
+        programStatus: resultStatus,
+        programLink,
+      }).catch((err) => console.error("Lỗi khi gửi email kết quả duyệt tới người tạo:", err));
+    }
+
+    // 2. Gửi mail xác nhận tới người duyệt
+    if (reviewer && reviewer.email) {
+      sendProgramDecisionConfirmationToReviewer({
+        toEmail: reviewer.email,
+        reviewerName,
+        program,
+        action,
+        comment,
+        programStatus: resultStatus,
+        programLink,
+      }).catch((err) => console.error("Lỗi khi gửi email xác nhận cho người duyệt:", err));
+    }
+  } catch (err) {
+    console.error("Failed to process approval decision notification emails:", err);
+  }
+}
+
+async function handleProgramApproval(token, action, comment, authHeader = null) {
+  let contextData = null;
+
+  const result = await prisma.$transaction(async (tx) => {
     const tokenData = await getTokenByToken(token, tx);
     validateToken(tokenData, action);
 
@@ -155,14 +206,23 @@ async function handleProgramApproval(token, action, comment) {
     validateProgram(program);
     validateVersion(tokenData, program);
 
-    return handleApprovalCore({
+    const coreResult = await handleApprovalCore({
       tx,
       program,
       tokenData,
       action,
       comment,
     });
+
+    contextData = { program, tokenData, action, comment, resultStatus: coreResult.status };
+    return coreResult;
   });
+
+  if (contextData) {
+    notifyApprovalDecision({ ...contextData, authHeader });
+  }
+
+  return result;
 }
 
 async function handleProgramApprovalByUser({
@@ -170,8 +230,10 @@ async function handleProgramApprovalByUser({
   reviewerId,
   action,
   comment,
-}) {
-  return prisma.$transaction(async (tx) => {
+}, authHeader = null) {
+  let contextData = null;
+
+  const result = await prisma.$transaction(async (tx) => {
     const program = await getProgramById(quarterProgramId, tx);
     validateProgram(program);
 
@@ -188,15 +250,25 @@ async function handleProgramApprovalByUser({
 
     validateToken(tokenData, action);
 
-    return handleApprovalCore({
+    const coreResult = await handleApprovalCore({
       tx,
       program,
       tokenData,
       action,
       comment,
     });
+
+    contextData = { program, tokenData, action, comment, resultStatus: coreResult.status };
+    return coreResult;
   });
+
+  if (contextData) {
+    notifyApprovalDecision({ ...contextData, authHeader });
+  }
+
+  return result;
 }
+
 
 async function createProgramApprovalToken(quarterProgramId, reviewerIds, senderUser = null, tx = prisma, authHeader = null) {
   if (!reviewerIds || !reviewerIds.length) {
@@ -341,10 +413,54 @@ async function getProgramApprovalHistory(quarterProgramId, authHeader = null) {
   }));
 }
 
+async function getPendingProgramApprovals(reviewerId) {
+  const pendingTokens = await prisma.programApprovalToken.findMany({
+    where: {
+      reviewerId: Number(reviewerId),
+      status: "PENDING",
+    },
+    include: {
+      quarterProgram: {
+        include: {
+          lessons: {
+            select: { id: true },
+          },
+        },
+      },
+    },
+    orderBy: { createdAt: "desc" },
+  });
+
+  return pendingTokens
+    .filter((t) => t.quarterProgram !== null)
+    .map((t) => {
+      const prog = t.quarterProgram;
+      const branch = getBranchInfo(prog.branchId);
+      return {
+        tokenId: t.id,
+        token: t.token,
+        expiredAt: t.expiredAt,
+        createdAt: t.createdAt,
+        program: {
+          id: prog.id,
+          branchId: prog.branchId,
+          branch,
+          year: prog.year,
+          quarter: prog.quarter,
+          status: prog.status,
+          version: prog.version,
+          note: prog.note,
+          lessonCount: prog.lessons.length,
+        },
+      };
+    });
+}
+
 module.exports = {
   createProgramApprovalToken,
   handleProgramApproval,
   handleProgramApprovalByUser,
   getProgramApprovalDetail,
   getProgramApprovalHistory,
+  getPendingProgramApprovals,
 };
