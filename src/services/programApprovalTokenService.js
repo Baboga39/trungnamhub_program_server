@@ -293,7 +293,7 @@ async function createProgramApprovalToken(quarterProgramId, reviewerIds, senderU
   const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
   const links = tokens.map((t) => ({
     reviewerId: t.reviewerId,
-    link: `${frontendUrl}approve-program?token=${t.token}`,
+    link: `${frontendUrl}/approve-program?token=${t.token}`,
   }));
 
   // Fetch reviewer user details from Core Backend
