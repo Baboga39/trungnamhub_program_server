@@ -31,6 +31,7 @@ const sendProgramApprovalMail = async ({
 }) => {
   if (!resend) {
     console.warn("⚠️ RESEND_API_KEY is not configured in .env");
+    throw new Error("Resend API key is not configured. Please set RESEND_API_KEY in your environment variables.");
     return;
   }
 

@@ -38,13 +38,23 @@ if (process.env.NODE_ENV !== "test") {
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Health check endpoint
-app.get("/health", (req, res) => {
-  res.status(200).json({
-    status: "UP",
-    service: "trungnamhub_program_server",
-    timestamp: new Date().toISOString(),
-  });
+
+app.get("/health", async (req, res) => {
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+
+    res.status(200).json({
+      status: "ready",
+      database: "connected",
+    });
+  } catch (error) {
+    console.error("Readiness check failed:", error);
+
+    res.status(503).json({
+      status: "not_ready",
+      database: "disconnected",
+    });
+  }
 });
 
 // Register API Routes
