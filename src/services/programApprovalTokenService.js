@@ -152,7 +152,7 @@ async function handleApprovalCore({ tx, program, tokenData, action, comment }) {
 
 async function notifyApprovalDecision({ program, tokenData, action, comment, resultStatus, authHeader }) {
   try {
-    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+    const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
     const programLink = `${frontendUrl}/programs/${program.id}`;
 
     const userIds = [];
@@ -290,10 +290,10 @@ async function createProgramApprovalToken(quarterProgramId, reviewerIds, senderU
 
   const result = await tx.programApprovalToken.createMany({ data: tokens });
 
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:5173";
+  const frontendUrl = (process.env.FRONTEND_URL || "http://localhost:5173").replace(/\/+$/, "");
   const links = tokens.map((t) => ({
     reviewerId: t.reviewerId,
-    link: `${frontendUrl}/approve-program?token=${t.token}`,
+    link: `${frontendUrl}approve-program?token=${t.token}`,
   }));
 
   // Fetch reviewer user details from Core Backend
