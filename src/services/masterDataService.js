@@ -5,11 +5,12 @@
 const COMMON_PROGRAMS = [
   { code: "NGHI_LE", name: "Nghi lễ" },
   { code: "GIAO_SU", name: "Giáo sử" },
-  { code:
-  "GIAO_LY", name: "Giáo lý" },
+  { code: "GIAO_LY", name: "Giáo lý" },
   { code: "GIAO_LUAN", name: "Giáo luận" },
   { code: "SINH_HOAT_CHUNG", name: "Sinh hoạt chung" },
   { code: "TRO_CHOI", name: "Trò chơi" },
+  { code: "GIAO_LUAT", name: "Giáo luật" },
+  { code: "KY_NANG", name: "Kỹ năng" },
   { code: "CHAO_CONG", name: "Chào cờ" },
   { code: "KHAC", name: "Khác" },
 ];
