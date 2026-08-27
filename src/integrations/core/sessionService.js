@@ -54,6 +54,38 @@ async function ensureSessionInCore(
   }
 }
 
+/**
+ * Find existing attendance session in Core Backend without creating a ghost session.
+ */
+async function findSessionInCore(date, branchId, authHeader = null) {
+  const client = createCoreClient(authHeader);
+
+  try {
+    const d = new Date(date);
+    const dateStr = !isNaN(d.getTime()) ? d.toISOString().split("T")[0] : date;
+
+    const response = await client.get("/attendance/find-session", {
+      params: {
+        date: dateStr,
+        branch: branchId,
+      },
+    });
+
+    const sessionData = response.data?.data || response.data;
+    return sessionData?.id ? sessionData : null;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      return null;
+    }
+    console.error(
+      "[Core Session] Failed to find session:",
+      err.response?.data || err.message
+    );
+    throw err;
+  }
+}
+
 module.exports = {
   ensureSessionInCore,
+  findSessionInCore,
 };

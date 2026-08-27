@@ -1,6 +1,6 @@
 const prisma = require("../libs/prisma");
 const { getAttendanceFromCore } = require("../integrations/core/attendanceService");
-const { ensureSessionInCore } = require("../integrations/core/sessionService");
+const { ensureSessionInCore, findSessionInCore } = require("../integrations/core/sessionService");
 
 /**
  * Service managing Attendance integration between Program Lesson and Core Backend.
@@ -61,14 +61,20 @@ async function syncAttendanceForLesson(lessonId, userScope = {}, authHeader = nu
     throw { statusCode: 403, message: "Forbidden: Cannot sync attendance for another branch" };
   }
 
-  // Ensure coreSessionId exists
-  let coreSessionId = lesson.coreSessionId;
-  if (!coreSessionId) {
-    const sessionRes = await ensureSessionForLesson(lessonId, userScope, authHeader);
-    coreSessionId = sessionRes.coreSessionId;
+  // 1. Kiểm tra xem buổi điểm danh thực tế của Ngành vào ngày này đã tồn tại trong Core chưa
+  const coreSession = await findSessionInCore(lesson.date, branchId, authHeader);
+  if (!coreSession || !coreSession.id) {
+    const d = new Date(lesson.date);
+    const dateFormatted = !isNaN(d.getTime()) ? d.toLocaleDateString("vi-VN") : lesson.date;
+    throw {
+      statusCode: 404,
+      message: `Chưa có buổi điểm danh nào của Ngành ${branchId} vào ngày ${dateFormatted}. Vui lòng điểm danh tại mục Điểm danh trước khi đồng bộ!`,
+    };
   }
 
-  // Fetch attendance counts from Core Backend
+  const coreSessionId = coreSession.id;
+
+  // 2. Fetch attendance counts from Core Backend
   const attendanceData = await getAttendanceFromCore(
     lesson.date,
     branchId,
@@ -76,9 +82,7 @@ async function syncAttendanceForLesson(lessonId, userScope = {}, authHeader = nu
     authHeader
   );
 
-  console.log(attendanceData);
-
-  // Update actualParticipantCount in local database
+  // 3. Update actualParticipantCount in local database
   const updatedLesson = await prisma.programLesson.update({
     where: { id: Number(lessonId) },
     data: {
