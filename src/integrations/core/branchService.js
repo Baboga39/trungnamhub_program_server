@@ -8,7 +8,7 @@ const DEFAULT_BRANCHES = [
   { id: "2", name: "Ngành Thiếu" },
   { id: "3", name: "Ngành Nghĩa" },
   { id: "4", name: "Ngành Hiệp" },
-  { id: "5", name: "Ban Huynh Trưởng" },
+  { id: "5", name: "Ban trưởng" },
 ];
 
 async function getBranchesFromCore(authHeader = null) {
