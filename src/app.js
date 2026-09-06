@@ -1,8 +1,10 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const compression = require("compression");
 const morgan = require("morgan");
 const rateLimit = require("express-rate-limit");
+const { corsOptions } = require("./config/corsConfig");
 const registerRoutes = require("./routes");
 const errorMiddleware = require("./middlewares/errorMiddleware");
 
@@ -11,9 +13,10 @@ const app = express();
 // Trust Render's reverse proxy
 app.set("trust proxy", 1);
 
-// Security Middlewares
+// Performance & Security Middlewares
+app.use(compression());
 app.use(helmet());
-app.use(cors());
+app.use(cors(corsOptions));
 
 // Rate Limiting
 const limiter = rateLimit({
