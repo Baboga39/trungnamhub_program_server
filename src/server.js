@@ -1,5 +1,6 @@
 const app = require("./app");
 const env = require("./config/env");
+const prisma = require("./libs/prisma");
 
 const PORT = env.port;
 
@@ -16,10 +17,18 @@ const server = app.listen(PORT, () => {
 process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
-function shutdown() {
-  console.log("Shutting down Program Server gracefully...");
-  server.close(() => {
-    console.log("Server stopped.");
-    process.exit(0);
+async function shutdown() {
+  console.log("\n🛑 Shutting down Program Server gracefully...");
+  server.close(async () => {
+    try {
+      await prisma.$disconnect();
+      console.log("🔌 Prisma disconnected cleanly.");
+      process.exit(0);
+    } catch (err) {
+      console.error("Error disconnecting Prisma:", err);
+      process.exit(1);
+    }
   });
 }
+
+module.exports = server;
